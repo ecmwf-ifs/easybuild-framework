@@ -2665,6 +2665,7 @@ def get_source_tarball_from_git(filename, targetdir, git_config):
     url = git_config.pop('url', None)
     repo_name = git_config.pop('repo_name', None)
     commit = git_config.pop('commit', None)
+    branchname = git_config.pop('branchname', None)
     recursive = git_config.pop('recursive', False)
     clone_into = git_config.pop('clone_into', False)
     keep_git_dir = git_config.pop('keep_git_dir', False)
@@ -2678,11 +2679,17 @@ def get_source_tarball_from_git(filename, targetdir, git_config):
     if not repo_name:
         raise EasyBuildError("repo_name not specified in git_config parameter")
 
-    if not tag and not commit:
-        raise EasyBuildError("Neither tag nor commit found in git_config parameter")
+    if not tag and not commit and not branchname:
+        raise EasyBuildError("Neither tag nor commit nor branch found in git_config parameter")
 
     if tag and commit:
         raise EasyBuildError("Tag and commit are mutually exclusive in git_config parameter")
+
+    if tag and branchname:
+        raise EasyBuildError("Tag and branch are mutually exclusive in git_config parameter")
+
+    if commit and branchname:
+        raise EasyBuildError("Commit and branch are mutually exclusive in git_config parameter")
 
     if not url:
         raise EasyBuildError("url not specified in git_config parameter")
@@ -2708,6 +2715,12 @@ def get_source_tarball_from_git(filename, targetdir, git_config):
 
     if tag:
         clone_cmd.extend(['--branch', tag])
+        if recursive:
+            clone_cmd.append('--recursive')
+        if recurse_submodules:
+            clone_cmd.extend(["--recurse-submodules='%s'" % pat for pat in recurse_submodules])
+    elif branchname:
+        clone_cmd.extend(['--branch', branchname])
         if recursive:
             clone_cmd.append('--recursive')
         if recurse_submodules:
@@ -2741,6 +2754,19 @@ def get_source_tarball_from_git(filename, targetdir, git_config):
                 checkout_cmd.extend(["--recurse-submodules='%s'" % pat for pat in recurse_submodules])
 
         run.run_cmd(' '.join(checkout_cmd), log_all=True, simple=True, regexp=False, path=repo_name)
+
+    elif branchname:
+        print_msg("WARNING : checking out a branch rather than a commit or tag, this is *not* a fixed target!")
+        checkout_cmd = [git_cmd, 'checkout', branchname]
+        if recursive or recurse_submodules:
+            checkout_cmd.extend(['&&', git_cmd, 'submodule', 'update', '--init'])
+            if recursive:
+                checkout_cmd.append('--recursive')
+            if recurse_submodules:
+                checkout_cmd.extend(["--recurse-submodules='%s'" % pat for pat in recurse_submodules])
+        run.run_cmd(' '.join(checkout_cmd), log_all=True, simple=True, regexp=False, path=repo_name)
+
+
 
     elif not build_option('extended_dry_run'):
         # If we wanted to get a tag make sure we actually got a tag and not a branch with the same name
